@@ -5,7 +5,7 @@ date: "23 May 2016"
 output: html_document
 ---
 
-This is the accompanying material for the BES Quantitative Ecology Special Interest Group course on Data Management in R, delivered on 23rd May 2016 at Charles Darwin House, London.
+This is the accompanying material for the BES Quantitative Ecology Special Interest Group course on Data Management in R, delivered on 23rd May 2016 at Charles Darwin House, London. 
 
 The course is accompanied by a Powerpoint presentation and covers three key areas:
 
@@ -435,5 +435,9 @@ Windows: http://git-scm.com/download/win
 OS X: http://git-scm.com/download/mac
 Debian/Ubuntu: sudo apt-get install git-core
 Other linux: http://git-scm.com/download/linux
+
+Handy guide for Git and Github in RStudio:
+
+http://r-pkgs.had.co.nz/git.html
 
 
