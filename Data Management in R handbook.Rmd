@@ -1,0 +1,439 @@
+---
+title: "Data Management course handbook"
+author: "Susan Jarvis"
+date: "23 May 2016"
+output: html_document
+---
+
+This is the accompanying material for the BES Quantitative Ecology Special Interest Group course on Data Management in R, delivered on 23rd May 2016 at Charles Darwin House, London.
+
+The course is accompanied by a Powerpoint presentation and covers three key areas:
+
+1. Working with data from different sources in R
+
+2. Managing data within R
+
+3. Managing R scripts and datasets
+
+
+
+##1. Utilising data from different sources in R
+
+###1.1 Excel
+
+Two main ways for importing data from Excel:
+
+a) Export to a csv file and then import using read.csv
+
+```{r}
+##I always find it helps to set the working directory near the top of your script
+setwd("N:/Quant Ecol SIG/")
+
+
+#read.csv default settings assume your data has headers in the first row
+datacsv1 <- read.csv("DM_2305_ExcelExample_plots.csv")
+datacsv2 <- read.csv("DM_2305_ExcelExample_sites.csv")
+#look at the top 6 rows of the first sheet
+head(datacsv1)
+```
+
+b) Import directly from Excel, one sheet at a time
+
+```{r, message = FALSE}
+#install and import the 'xlsx' package
+require(xlsx)
+#read the first sheet with plot measurements
+
+dataexcel1 <- read.xlsx("DM_2305_ExcelExample.xlsx", sheetName = "Plot measurements")
+head(dataexcel1)
+```
+
+Note the data imported via .csv only contains the number of decimal points displayed in Excel so importing directly via Excel is more accurate.
+
+
+
+###1.2 Access and Oracle databases
+
+To interact with databases we need to use the `ROBDC` package.
+
+```{r, message=FALSE}
+library(RODBC)
+```
+
+Follow the instructions to set up an ODBC connection on your computer. Once this is ready we can access it via the RODBC package.
+
+Firstly, we need to set up the ODBC connection.
+
+```{r, message=FALSE}
+con <- odbcConnect("Example")
+```
+
+We can then read entire tables from the database.
+
+```{r}
+dataodbc1 <- sqlFetch(con, "Plot measurements")
+```
+
+Note that the Plot measurements table now has an extra column called 'ID' - this is because Access uses it's own unique ID system.
+
+Alternatively, we might want to import specific records. This is often useful if we are dealing with very large databases with thousands of records and don't need to use all of the data.
+
+To select specific records we use the SQL language which is commonly used in database applications.
+
+```{r}
+#Only select records from the first site
+dataodbc1a <- sqlQuery(con, "select * from `Plot measurements` where Site = 1")
+```
+
+
+
+###1.3 SAS
+
+It is possible to directly read SAS database files using either the `haven` or `sas7bdat` package HOWEVER as both methods require export of data as a SAS dataset it is probably just as efficient to export as .csv and import using read.csv.
+
+
+
+###1.4 NetCDF
+
+Packages`RNetCDF` and `ncdf4` can read NetCDF files.
+
+Useful guide here: http://disc.sci.gsfc.nasa.gov/recipes/?q=recipes/How-to-Read-Data-in-netCDF-Format-with-R
+
+
+
+###1.5 Spatial data
+
+Lots of R packages available such as `rdgal`, `rgeos` and lots of tutorials available such as this one:
+
+https://github.com/Robinlovelace/Creating-maps-in-R
+
+
+
+##2. Manipulating data in R
+
+###2.1 Single datasets
+
+For all these examples we will use the iris dataset distributed as part of base R, this is a dataset of measurements of flower characteristics for three species of iris.
+
+####2.1.1 Formats
+
+There are lots of situations in R where the format of your data is crucial i.e. some functions will only work with dataframes, some will only work with matrices. The data import methods in part 1 almost always produce a dataframe but it is good practise to check the format after importing any data to make sure. If you are using RStudio you can check the format of any data in the Environment window. You can also check the format using `is.` functions.
+
+Import iris data so it shows up in your environment window if you are using RStudio.
+```{r}
+iris <- iris
+```
+The little table symbol tells us the format is dataframe but we can check directly
+```{r}
+is.data.frame(iris)
+is.matrix(iris)
+```
+The `typeof` function also gives the format...
+```{r}
+typeof(iris)
+```
+But beware! Dataframes are represented as lists in R so you might not get the answer you expect! `is.` statements are the better option here.
+If we needed the iris dataset as a matrix or list we can use `as.`
+```{r}
+iris.mat <- as.matrix(iris)
+iris.list <- as.list(iris)
+```
+
+Most of the time you will be using data in a dataframe. Dataframes can hold columns of values of different types e.g. numeric, character and factor variables. Matrices cannot do this (note all the values in iris.mat are of character type). Many common R errors arise from not checking the data type of columns in a dataframe.
+
+For example, lets add a new factor (experimental plot let's say, to which plants were randomly assigned) to the iris dataset
+```{r}
+iris$Plot <- rep(c(rep(1,10), rep(2, 10), rep(3,5)),3)
+```
+We want to run a linear model with Species and Plot as predictors of Sepal.Length (fixed effects)
+```{r}
+lm1 <- lm(Sepal.Length ~ Species + Plot, data = iris)
+summary(lm1)
+```
+The model has correctly intepreted Species as a factor (categorical) variable but has assumed plot is numeric and calculated a slope. This doesn't make sense as plot is not a measured covariate (plot 3 is not 3x "plottier" than plot 1!).
+
+So we need to make sure that plot is also recognised as a factor. `is.` statements can help us here too.
+```{r}
+is.factor(iris$Plot)
+iris$Plotf <- factor(iris$Plot)
+is.factor(iris$Plotf)
+
+lm2 <- lm(Sepal.Length ~ Species + Plotf, data = iris)
+summary(lm2)
+```
+
+
+Lists are a very handy format for storing data of all sorts of types (vectors, dataframes, matrices etc).
+
+List structure can be complicated with several levels. Return list structure with `str`.
+```{r, eval = FALSE}
+str(iris.list)
+```
+Retrieve list elements with `[]` or `[[]]` if unnamed, or `$` if the list elements are named.
+```{r, eval = FALSE}
+iris.list$Sepal.Length
+iris.list[1]
+iris.list[[1]]
+iris.list[[1]][1]
+```
+Note that lists often have multiple levels and combinations of square brackets can be used to extract elements from different levels.
+
+
+####2.1.2 Sorting data
+
+Sorting data in R, assuming your data are in a dataframe, uses the `order` function. Let's say we want to sort the iris data by Petal.Width, with narrow petals first.
+
+```{r, eval=FALSE}
+iris[order(iris$Petal.Width),]
+```
+Or with wide petals first
+```{r, eval=FALSE}
+iris[order(-iris$Petal.Width),]
+```
+Or by Species, then Petal.Width
+```{r, eval=FALSE}
+iris[order(iris$Species, iris$Petal.Width),]
+```
+
+
+####2.1.3 Removing duplicates
+
+Duplicate entries can be a big problem in analysis, particularly if you are using big datasets where duplicates are difficult to spot by eye. Duplicates can arise for lots of reasons: bad data entry, accidental duplication during data manipulation in Excel (dragging cells), wrongly matching up data in SAS etc. Note: if you have duplicate entries always go back and find out why! Often they are an indication of a bigger problem in your data workflow.
+
+Checking for duplicates uses `duplicated`. By default this looks for duplicates across all columns of a dataframe (i.e. all entries in a row match another row exactly).
+
+```{r, eval=FALSE}
+duplicated(iris)
+```
+Duplicated returns a TRUE/FALSE value for every row indicating whether it is identical to another row, all the rows in iris data are unique. However, what if we were expecting a dataset where combinations of Petal.Length and Petal.Width were all unique.
+```{r, eval=FALSE}
+duplicated(iris[,3:4])
+```
+Note the column numbers were used to identify the relevant columns for concise coding. We now have some duplicates. We can investigate this further by looking at the first few rows to see what the function is doing
+```{r}
+duplicated(iris[,3:4])[1:6] #first six results of duplicated
+head(iris,6)#first six rows of the dataset
+```
+The function tells us that the second and fifth rows are duplicated. Loking at the dataset we can see that both of these rows have Petal.Length of 1.4 and Petal.Width of 0.2, the same as the row 1. However, row 1 does not count as duplicated - the function only identifies second entries onwards. This means we can easily use the function to remove the duplicate entries while retaining a single entry for this combination from row 1:
+
+```{r, eval=FALSE}
+iris.unique <- iris[!duplicated(iris[,3:4]),] #The exclamation marks means 'not'
+nrow(iris.unique) #102 rows remain in this dataset from the 150 original rows
+```
+
+The same result can also be achieved using the `distinct` function in package `dplyr`:
+
+```{r, warning = FALSE, message = FALSE}
+require(dplyr)
+iris.unique2 <- distinct(iris, Petal.Length, Petal.Width)
+```
+
+
+####2.1.4 Removing missing data
+
+Although most R functions can cope with `NA` values using either `na.action` or `na.rm` arguments, there are some cases where it might be necessary to remove rows that contain `NA`. There is a simple function `complete.cases` to do this.
+
+The iris data currenly doesn't have any `NA` values so let's create a new dataset and replace some values with NA, such as might occur if measurements were missing.
+```{r}
+iris.NA <- iris
+iris.NA[1:4,1] <- NA #replace the first four entries in column 1 with NA
+head(iris.NA)
+```
+We can identify quickly which columns contain `NA` using `summary`.
+```{r, eval=F}
+summary(iris.NA)
+```
+And display rows containing `NA` values in the Sepal.Length column
+```{r}
+iris.NA[is.na(iris.NA$Sepal.Length),]
+```
+If we decide we need to remove rows containing `NA` we can select complete cases only
+```{r, eval=F}
+iris.NA.cc <- iris.NA[complete.cases(iris.NA),]
+head(iris.NA.cc)
+summary(iris.NA.cc)
+```
+Rows 1:4 have now been removed and there are no `NA` values in the table.
+
+
+####2.1.5 Reshaping data
+
+There may be times when you are presented with data that is not in an ideal format for analysis e.g. multiple variables in a single column. Hadley Wickham defines 'tidy data' as having the following characteristics (check out his paper in the Journal of Statistical Software (2014) 59 for more details):
+
+1. Each variable is a column
+
+2. Each observation is a row
+
+3. Each type of observational unit forms a table
+
+There is a whole R package `tidyr` with a range of functions to help tidy up datasets. There is a really brief and useful introduction to the key functions in the package here: https://blog.rstudio.org/2014/07/22/introducing-tidyr/
+
+However, I prefer to use the older `reshape` and `reshape2` packages which are not as simple but more flexible. Here we will use the newer `reshape2` package.
+
+```{r, warning=FALSE,message=FALSE}
+require(reshape2)
+```
+
+There are only two key functions in this package: `melt` and `cast`.
+
+`melt` is used to change dataframes from wide to long format. For example, applying this to the iris dataset gives us a single column with all values in and another column with all the variable labels. By default melt uses factor variables as 'id' variables (look at the difference between how Plotf and Plot columns are dealt with). 
+
+```{r, message=FALSE}
+iris.melt <- melt(iris)
+summary(iris.melt)
+```
+
+`cast` is used to change long format to wide format (where each variable as a column). In `reshape2` there are two options: `acast` to create matrices and `dcast` to create dataframes.
+
+You can now choose a range of functions with which to summarise data, the default option is length which calculates a frequency table of the values.
+
+```{r, message=FALSE}
+iris.cast <- dcast(iris.melt, value~variable)
+head(iris.cast)
+```
+
+This might not be what we are looking for, it might be more sensible to use the cast function to calculate a mean of each of the variables, per species and plot combination.
+
+```{r, message=FALSE}
+iris.cast2 <- dcast(iris.melt, Species~variable, fun=mean)
+iris.cast2
+```
+
+Note that in both cases of using `cast` functions the structure is denoted by a formula, with rows on the left hand side and columns on the right. 
+
+
+####2.1.6 Summarising data
+
+We saw above how we could summarise data using `cast`. Two other popular approaches are `aggregate` and `apply`.
+
+Using the same example of calculating means for each variable for each species in the iris dataset:
+
+```{r,warning = FALSE,message =FALSE}
+iris.agg <- aggregate(iris,list(iris$Species),mean)
+```
+
+Note the default output gives you warnings about not removing factor variables first, try removing these using `[]` to subset columns and iris.agg should be the same as iris.cast2.
+
+`tapply` can be used to calculate group means but only works on a single column at a time.
+
+```{r, eval=FALSE}
+tapply(iris$Sepal.Length,iris$Species,mean)
+```
+
+
+###2.1.7 Applying functions to data
+
+I often hear people tell me that they have Excel spreadsheets set up to automatically run functions to, for example, convert units from lab or field outputs. While automatic calculation is preferable to manual, doing this is still less preferable than a direct import to R where you can do these calculations in an easily reproducible and auditable way.
+
+R is (very handily) vectorized which means it is very simple to calculate functions for each row of a dataset/entry in a vector.
+
+For example we can create a new column with log(Sepal.Length):
+```{r}
+iris$LogSepLength <- log(iris$Sepal.Length)
+```
+
+For more complicated functions you might occasionally need to use `apply` functions, `if` statements or loops. There is a lot of information available on these so we won't cover them in detail here.
+
+
+###2.2 Multiple datasets
+
+Often you will not store all your data in one dataframe. For example, you might have collected data on two separate occasions, each sampling time being stored in a different dataframe. Or you might keep information about say, climate conditions, in a separate sheet from data about soil chemistry. We will now investigate ways of joining data, still using the iris dataset.
+
+####2.2.1 Appending data
+
+Firstly, we will consider a scenario where we had additional measurements from a fourth plot of iris data, which was not included in the original dataset. Only one species was measured in this plot.
+```{r}
+#create some new random data for plot 4
+iris.extra <- data.frame(Sepal.Length = rnorm(10, 5, 0.7), Sepal.Width = rnorm(10,3.2,0.5),Petal.Length = rnorm(10,1.3,0.3), Petal.Width = rnorm(10,0.2, 0.001), Species = "setosa", Plot = 4)
+```
+
+The function `rbind` is the basic function in R to append datasets.
+```{r, eval=F}
+rbind(iris, iris.extra)
+```
+
+However, `rbind` requires the correct number of columns - we have two extra columns in the iris data. We therefore need to either add these new columns to the new data or remove them from the existing data. Let's try adding them to the new data
+```{r}
+iris.extra$Plotf <- factor(iris.extra$Plot)
+iris.extra$LogSepLength <- log(iris.extra$Sepal.Length)
+iris.all <- rbind(iris, iris.extra)
+```
+We are now able to combine the datasets with `rbind`. Alternative tools are `smartbind` in the `gtools` package or `rbind.fill` from `plyr` which will add `NA` values if columns cannot be matched.
+
+
+####2.2.2 Matching data
+
+The alternative situation you will commonly encounter is when different data types are stored in different dataframes but can be linked through common observations. For example, observations of individual weight in one dataframe with other characteristics about that individual (years of education) in a different dataframe. This situation is often useful when one characteristic (such as weight) is measured multiple times without influencing the other variable. If all data were in one dataframe then the values for e.g. years of education would have to be duplicated for each new measurement of mass.
+
+Keeping with the iris dataset, let us imagine that we also have two extra datasets with different types of data. The first has information about the species (average height, colour), the second has information about the seeds collected from each plant (number of seeds, proportion germinated).
+
+You will note that there is now a big problem with the iris dataset - no unique and persistent identifier! Note that this hasn't been a problem until now, but we now have no observation level identifier to join to a new dataset, so we will have to make one. It might make sense to include the species name in the identifier so we don't have to keep referencing back to remember which number is which species so we'll number individuals "setosa1" etc. We could have chosen a different ID scheme e.g. including plot as well, the key thing is that this is unique for each observation. We will assume individual plants were only measured once.
+
+```{r}
+iris.all$ObsID <- paste0(iris.all$Species, row.names(iris.all))
+```
+
+Now we can create our two additional datasets. Firstly the species data.
+```{r}
+irisspdata <- data.frame(Species = unique(iris$Species), avgheight = c(42.3, 33.5, 35.7), colour = c("violet", "blue", "blue"))
+```
+
+And then the additional plant data (generated randomly for this example).
+```{r}
+irisindivdata <- data.frame(ObsID = iris.all$ObsID, noseeds = c(rpois(50, 10), rpois(50,8), rpois(50, 9), rpois(10,10)))
+irisindivdata$germprop <- c(rpois(50, 3), rpois(50,2), rpois(50, 3), rpois(10,3))/irisindivdata$noseeds
+```
+
+There are many ways to match datasets in R but I find the most flexible is to use the package `sqldf` which allows SQL based queries in R. This is very useful if you want to replicate an SQL query from another program such as SAS in R as the syntax will be the same. 
+
+```{r, message = FALSE, warning = FALSE}
+require(sqldf)
+```
+Joining the species data is straightforward BUT `.` means something different in SQL so I first need to rename iris.all as iris_all
+
+```{r}
+iris_all <- iris.all
+irismatchsp <- sqldf("select * from iris_all, irisspdata where iris_all.Species = irisspdata.Species")
+```
+
+The `*` indicate we want all columns from both datasets in the new dataset.
+
+Now we can add the other species data.
+
+```{r,eval=FALSE}
+irismatchindiv <- sqldf("select * from irismatchsp, irisindivdata where irismatchsp.ObsID = irisindivdata.ObsID")
+```
+
+Or not...now we have issues because we have duplicate columns in our data which actually orignate from the first join. Lets try that again but using only the required columns
+
+```{r}
+irismatchsp2 <- sqldf("select t1.*, t2.avgheight, t2.colour from iris_all as t1, irisspdata as t2 where t1.Species = t2.Species")
+irismatchindiv <- sqldf("select * from irismatchsp2, irisindivdata where irismatchsp2.ObsID = irisindivdata.ObsID")
+head(irismatchindiv)
+```
+
+We have now successfully joined all our data together. Note the two step process - this is useful to do to make sure you catch any errors as you go.
+
+
+
+## 3. Documentation
+
+This script is documentated in the following ways:
+1. Code is commented where neccessary
+2. The code is embedded in a Markdown document
+3. The code is stored on Github
+
+
+Link to Github:
+
+https://github.com/
+
+
+Install links for Git:
+
+Windows: http://git-scm.com/download/win
+OS X: http://git-scm.com/download/mac
+Debian/Ubuntu: sudo apt-get install git-core
+Other linux: http://git-scm.com/download/linux
+
+
